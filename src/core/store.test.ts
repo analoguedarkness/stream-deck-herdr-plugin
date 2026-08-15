@@ -46,6 +46,28 @@ test("a single failure keeps last-good; a second failure empties", async () => {
   expect(store.getState().agents).toHaveLength(0); // emptied
 });
 
+test("healthy is false until a fetch succeeds and after a failure wipe", async () => {
+  let mode: "ok" | "fail" = "fail";
+  const store = createAgentStore({
+    fetchAgents: async () => {
+      if (mode === "fail") throw new Error("unreachable");
+      return six;
+    },
+  });
+  expect(store.getState().healthy).toBe(false); // initial
+  await store.pollNow();
+  await store.pollNow();
+  expect(store.getState().healthy).toBe(false); // wiped, still unhealthy
+  mode = "ok";
+  await store.pollNow();
+  expect(store.getState().healthy).toBe(true);
+  mode = "fail";
+  await store.pollNow();
+  expect(store.getState().healthy).toBe(true); // single failure keeps last-good
+  await store.pollNow();
+  expect(store.getState().healthy).toBe(false); // second failure wipes
+});
+
 test("idle agents are filtered out of the store", async () => {
   const mixed: RawAgent[] = [
     { agent: "a", agent_status: "working", cwd: "/x/a", pane_id: "w1:p1", workspace_id: "w1" },

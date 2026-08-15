@@ -2,7 +2,10 @@
 import { normalize, orderForDisplay, type Agent, type RawAgent } from "./agents";
 import { clampPage, pageCount } from "./pagination";
 
-export type StoreState = { agents: Agent[]; page: number };
+// `healthy` is true only while the agent list reflects a successful fetch —
+// false initially and after a failure wipe, so consumers can tell "empty
+// because the server is unreachable" from "genuinely no agents".
+export type StoreState = { agents: Agent[]; page: number; healthy: boolean };
 
 export type AgentStore = {
   getState(): StoreState;
@@ -21,7 +24,7 @@ export function createAgentStore(opts: {
   pageSize?: number;
 }): AgentStore {
   const pageSize = opts.pageSize ?? 5;
-  let state: StoreState = { agents: [], page: 0 };
+  let state: StoreState = { agents: [], page: 0, healthy: false };
   // Full normalized list (includes idle) so pinned-idle agents can resurface;
   // `pinned` is paneIds in pin order (in-memory, reset on plugin restart).
   let allAgents: Agent[] = [];
@@ -39,9 +42,9 @@ export function createAgentStore(opts: {
   };
   // Re-derive the displayed list (pinned-first, idle hidden) from the current
   // raw list + pins, clamping the page to the new length.
-  const recompute = () => {
+  const recompute = (extra: Partial<StoreState> = {}) => {
     const agents = orderForDisplay(allAgents, pinned);
-    set({ agents, page: clampPage(state.page, pageCount(agents.length, pageSize)) });
+    set({ ...extra, agents, page: clampPage(state.page, pageCount(agents.length, pageSize)) });
   };
 
   const store: AgentStore = {
@@ -74,13 +77,13 @@ export function createAgentStore(opts: {
         allAgents = normalize(await opts.fetchAgents());
         hasLastGood = true;
         failStreak = 0;
-        recompute();
+        recompute({ healthy: true });
       } catch {
         failStreak += 1;
         if (!(failStreak === 1 && hasLastGood)) {
           hasLastGood = false;
           allAgents = [];
-          recompute();
+          recompute({ healthy: false });
         }
       } finally {
         inFlight = false;
