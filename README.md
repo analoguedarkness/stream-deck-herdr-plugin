@@ -48,7 +48,7 @@ agent that's waiting on you.
 - **Stream Deck Mini** (6 keys)
 - macOS 26 (Apple Silicon)
 - Elgato Stream Deck app **7.4.2**
-- **herdr 0.7.0**
+- **herdr 0.8.0**
 
 The plugin is keypad-only and works on any Stream Deck model with keys. The
 default layout assumes the 6-key Mini, but you can place the two actions on a
@@ -58,7 +58,7 @@ deck of any size.
 
 - macOS 12 or newer
 - [Elgato Stream Deck](https://www.elgato.com/stream-deck) app 7.1+
-- [herdr](https://herdr.dev) 0.7.0+ installed and running (`herdr` on your `PATH`)
+- [herdr](https://herdr.dev) 0.8.0+ installed and running (`herdr` on your `PATH`)
 - To build from source: [Bun](https://bun.sh) and Node.js 24
 
 ## Install
