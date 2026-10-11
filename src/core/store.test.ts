@@ -113,3 +113,25 @@ test("page clamps when the agent list shrinks", async () => {
   await store.pollNow();
   expect(store.getState().page).toBe(0);
 });
+
+test("reset wipes to unhealthy and discards a fetch that was in flight", async () => {
+  let release: (v: RawAgent[]) => void = () => {};
+  let calls = 0;
+  const store = createAgentStore({
+    fetchAgents: () => {
+      calls += 1;
+      return calls === 2 ? new Promise((r) => (release = r)) : Promise.resolve(six);
+    },
+  });
+  await store.pollNow();
+  expect(store.getState().healthy).toBe(true);
+  const stale = store.pollNow(); // in flight against the old server
+  store.reset();
+  expect(store.getState()).toMatchObject({ agents: [], healthy: false });
+  const fresh = store.pollNow(); // must not be dropped as "in flight"
+  release(six.slice(0, 1));
+  await stale;
+  await fresh;
+  expect(calls).toBe(3);
+  expect(store.getState().agents).toHaveLength(6); // stale 1-agent result discarded
+});

@@ -10,9 +10,8 @@ const RESTART_MAX_MS = 30000;
 // A tunnel that stayed up this long is considered healthy; the restart backoff
 // resets so a later drop reconnects quickly again.
 const HEALTHY_AFTER_MS = 30000;
-// How long/often to watch for ssh binding the local socket before giving up on
-// signalling readiness (the respawn loop still retries the tunnel itself).
-const UP_WATCH_MS = 10000;
+// How often to check whether ssh has bound the local socket. Watching lasts as
+// long as the ssh process does: a slow first auth must still signal readiness.
 const UP_POLL_MS = 200;
 
 export const DEFAULT_REMOTE_SOCKET = ".config/herdr/herdr.sock";
@@ -80,7 +79,24 @@ export type ChildLike = {
 
 export type ExecFn = (cmd: string, args: string[], signal?: AbortSignal) => Promise<string>;
 
-const defaultSpawn: SpawnFn = (cmd, args) => nodeSpawn(cmd, args, { stdio: "ignore" });
+// A spawn failure (ssh missing, EAGAIN) emits "error" instead of "exit"; an
+// unhandled "error" would crash the plugin, so both end the child exactly once.
+const defaultSpawn: SpawnFn = (cmd, args) => {
+  const c = nodeSpawn(cmd, args, { stdio: "ignore" });
+  return {
+    on(_event, fn) {
+      let ended = false;
+      const end = (): void => {
+        if (ended) return;
+        ended = true;
+        fn();
+      };
+      c.on("exit", end);
+      c.on("error", end);
+    },
+    kill: () => c.kill(),
+  };
+};
 
 const defaultExec: ExecFn = (cmd, args, signal) => execText(cmd, args, { timeoutMs: 15000, signal });
 
@@ -136,9 +152,8 @@ export function createSshTunnel(opts: {
 
   const watchForUp = (): void => {
     clearUpWatch();
-    const deadline = Date.now() + UP_WATCH_MS;
     upWatch = setInterval(() => {
-      if (stopped || Date.now() > deadline) {
+      if (stopped) {
         clearUpWatch();
         return;
       }

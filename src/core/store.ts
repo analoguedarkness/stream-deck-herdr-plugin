@@ -15,6 +15,7 @@ export type AgentStore = {
   togglePin(paneId: string): void;
   isPinned(paneId: string): boolean;
   pollNow(): Promise<void>;
+  reset(): void;
   start(intervalMs?: number): void;
   stop(): void;
 };
@@ -32,6 +33,9 @@ export function createAgentStore(opts: {
   let hasLastGood = false;
   let failStreak = 0;
   let inFlight = false;
+  // Bumped by reset(): a fetch that started before it belongs to the previous
+  // connection and its result is discarded.
+  let generation = 0;
   let timer: ReturnType<typeof setInterval> | null = null;
   const subs = new Set<(s: StoreState) => void>();
 
@@ -73,12 +77,16 @@ export function createAgentStore(opts: {
     async pollNow() {
       if (inFlight) return;
       inFlight = true;
+      const gen = generation;
       try {
-        allAgents = normalize(await opts.fetchAgents());
+        const fetched = normalize(await opts.fetchAgents());
+        if (gen !== generation) return;
+        allAgents = fetched;
         hasLastGood = true;
         failStreak = 0;
         recompute({ healthy: true });
       } catch {
+        if (gen !== generation) return;
         failStreak += 1;
         if (!(failStreak === 1 && hasLastGood)) {
           hasLastGood = false;
@@ -86,8 +94,18 @@ export function createAgentStore(opts: {
           recompute({ healthy: false });
         }
       } finally {
-        inFlight = false;
+        if (gen === generation) inFlight = false;
       }
+    },
+    // Forget everything fetched so far (the connection now points at another
+    // server): an empty, unhealthy snapshot until the next successful fetch.
+    reset() {
+      generation += 1;
+      inFlight = false;
+      hasLastGood = false;
+      failStreak = 0;
+      allAgents = [];
+      recompute({ healthy: false });
     },
     start(intervalMs = 1000) {
       if (timer) return;

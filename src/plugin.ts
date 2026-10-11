@@ -81,8 +81,10 @@ const applyConnection = (gs: GlobalSettings): void => {
   tunnel = null;
   // The next snapshot comes from a different server (or a rebuilt connection):
   // prime on it instead of diffing across servers, which would fire a
-  // notification for every already-blocked/done agent over there.
-  prevAgents = null;
+  // notification for every already-blocked/done agent over there. Resetting the
+  // store (not just the baseline) keeps an in-flight fetch or a pin/page
+  // re-render from priming the baseline with the old server's list.
+  store.reset();
 
   if (target === "") {
     streamDeck.logger.info("herdr connection: local");
